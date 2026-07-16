@@ -380,62 +380,28 @@ lemma integrable_poly_mul_gaussianDensity (p : ℝ[X]) :
 lemma integral_X_mul_gaussianW (p : ℝ[X]) :
     ∫ x : ℝ, (X * p).eval x * Real.exp (-(x ^ 2 / 2))
       = ∫ x : ℝ, (derivative p).eval x * Real.exp (-(x ^ 2 / 2)) := by
-  let f : ℝ → ℝ := fun x => p.eval x
-  have hf_hasDeriv : ∀ x, HasDerivAt f ((derivative p).eval x) x := fun x => p.hasDerivAt x
-  have hderiv_f : ∀ x, (fderiv ℝ f x) (1 : ℝ) = (derivative p).eval x := by
-    intro x
-    have := (hf_hasDeriv x).deriv
-    rw [fderiv_apply_one_eq_deriv]; exact this
-  have hderiv_g : ∀ x, (fderiv ℝ (fun x => Real.exp (-(x ^ 2 / 2))) x) (1 : ℝ)
-      = -x * Real.exp (-(x ^ 2 / 2)) := by
-    intro x
-    rw [fderiv_apply_one_eq_deriv]
-    rw [deriv_exp (by fun_prop)]
-    rw [show (fun x : ℝ ↦ -(x ^ 2 / 2)) = fun x : ℝ ↦ -(1/2) * x ^ 2 by funext y; ring,
-      deriv_const_mul _ ((differentiable_pow 2) x)]
-    simp only [one_div, differentiableAt_fun_id, deriv_fun_pow, Nat.cast_ofNat, Nat.add_one_sub_one,
-      pow_one, deriv_id'', mul_one, neg_mul, ne_eq, OfNat.ofNat_ne_zero, not_false_eq_true,
-      inv_mul_cancel_left₀, mul_neg, neg_inj]
-    ring
-  have hXeval : ∀ x, (X * p).eval x * Real.exp (-(x ^ 2 / 2))
-      = -(f x * (fderiv ℝ (fun x => Real.exp (-(x ^ 2 / 2))) x) (1 : ℝ)) := by
-    intro x
-    rw [hderiv_g x]
-    simp only [f, eval_mul, eval_X]
-    ring
-  have hInt_fg : MeasureTheory.Integrable (fun x => f x * Real.exp (-(x ^ 2 / 2))) :=
-    integrable_poly_mul_gaussianW p
-  have hInt_f'g : MeasureTheory.Integrable
-      (fun x => (fderiv ℝ f x) (1 : ℝ) * Real.exp (-(x ^ 2 / 2))) := by
-    refine (integrable_poly_mul_gaussianW (derivative p)).congr ?_
-    filter_upwards with x
-    rw [hderiv_f x]
-  have hInt_fg' : MeasureTheory.Integrable
-      (fun x => f x * (fderiv ℝ (fun x => Real.exp (-(x ^ 2 / 2))) x) (1 : ℝ)) := by
-    refine ((integrable_poly_mul_gaussianW (X * p)).neg).congr ?_
-    filter_upwards with x
-    simp only [Pi.neg_apply]
-    rw [hXeval x, neg_neg]
-  have hdiff_f : ∀ x ∈ tsupport (fun x => Real.exp (-(x ^ 2 / 2))), DifferentiableAt ℝ f x :=
-    fun x _ => (hf_hasDeriv x).differentiableAt
-  have IBP : (∫ x, f x * (fderiv ℝ (fun x => Real.exp (-(x ^ 2 / 2))) x) (1 : ℝ))
-      = -∫ x, (fderiv ℝ f x) (1 : ℝ) * Real.exp (-(x ^ 2 / 2)) :=
-  integral_mul_fderiv_eq_neg_fderiv_mul_of_integrable
-    (v := (1 : ℝ)) hInt_f'g hInt_fg' hInt_fg hdiff_f
-    (fun x _ => (((hasDerivAt_id x).pow 2).div_const 2).neg.exp.differentiableAt)
-  have hL : (∫ x, f x * (fderiv ℝ (fun x => Real.exp (-(x ^ 2 / 2))) x) (1 : ℝ))
-      = -∫ x, (X * p).eval x * Real.exp (-(x ^ 2 / 2)) := by
-    rw [← MeasureTheory.integral_neg]
-    refine MeasureTheory.integral_congr_ae ?_
-    filter_upwards with x
-    rw [hXeval x, neg_neg]
-  have hR : (∫ x, (fderiv ℝ f x) (1 : ℝ) * Real.exp (-(x ^ 2 / 2)))
-      = ∫ x, (derivative p).eval x * Real.exp (-(x ^ 2 / 2)) := by
-    refine MeasureTheory.integral_congr_ae ?_
-    filter_upwards with x
-    rw [hderiv_f x]
-  rw [hL, hR] at IBP
-  exact neg_injective IBP
+  -- The Gaussian `v = e^{-x²/2}` has derivative `v' x = e^{-x²/2} · (-x)`.
+  have hv : ∀ x : ℝ, HasDerivAt (fun y : ℝ => Real.exp (-(y ^ 2 / 2)))
+      (Real.exp (-(x ^ 2 / 2)) * -x) x := fun x => by
+    have h1 : HasDerivAt (fun y : ℝ => -(y ^ 2 / 2)) (-x) x := by
+      have h0 := ((hasDerivAt_pow 2 x).div_const 2).neg
+      norm_num at h0
+      exact h0
+    exact h1.exp
+  -- `u · v' = -(X * p)·e^{-x²/2}` pointwise.
+  have hprod : ∀ x : ℝ, p.eval x * (Real.exp (-(x ^ 2 / 2)) * -x)
+      = -((X * p).eval x * Real.exp (-(x ^ 2 / 2))) := by
+    intro x; simp only [eval_mul, eval_X]; ring
+  have huv' : Integrable (fun x : ℝ => p.eval x * (Real.exp (-(x ^ 2 / 2)) * -x)) :=
+    (integrable_poly_mul_gaussianW (X * p)).neg.congr (.of_forall fun x => (hprod x).symm)
+  -- Integration by parts on `(-∞, ∞)`; the boundary terms vanish by integrability.
+  have key := integral_mul_deriv_eq_deriv_mul_of_integrable
+    (u := fun x : ℝ => p.eval x) (u' := fun x : ℝ => (derivative p).eval x)
+    (v := fun x : ℝ => Real.exp (-(x ^ 2 / 2))) (v' := fun x : ℝ => Real.exp (-(x ^ 2 / 2)) * -x)
+    (fun x _ => p.hasDerivAt x) (fun x _ => hv x) huv'
+    (integrable_poly_mul_gaussianW (derivative p)) (integrable_poly_mul_gaussianW p)
+  rw [integral_congr_ae (.of_forall hprod), integral_neg] at key
+  exact neg_injective key
 
 /-! ### The abstract Stein argument -/
 
