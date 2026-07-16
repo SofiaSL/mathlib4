@@ -18,6 +18,7 @@ public import Mathlib.Analysis.Calculus.LineDeriv.IntegrationByParts
 public import Mathlib.Analysis.InnerProductSpace.Basic       -- ⟪·,·⟫, Orthonormal
 public import Mathlib.Analysis.InnerProductSpace.L2Space     -- HilbertBasis
 public import Mathlib.MeasureTheory.Function.L2Space         -- L2.inner_def on `Lp`
+public import Mathlib.MeasureTheory.Integral.Bochner.ContinuousLinearMap
 
 /-!
 # Hermite polynomials
@@ -342,43 +343,44 @@ open scoped Nat RealInnerProductSpace ENNReal
 /-! ### The Gaussian weight -/
 
 /-- The unnormalised Gaussian weight `e^{-x²/2}`. -/
-noncomputable def gaussianW (x : ℝ) : ℝ := Real.exp (-(x ^ 2 / 2))
+--noncomputable def gaussianW (x : ℝ) : ℝ := Real.exp (-(x ^ 2 / 2))
+--
+@[simp] lemma gaussianW_pos (x : ℝ) : 0 < Real.exp (-(x ^ 2 / 2)) := Real.exp_pos _
 
-@[simp] lemma gaussianW_pos (x : ℝ) : 0 < gaussianW x := Real.exp_pos _
-
-lemma gaussianW_ne_zero (x : ℝ) : gaussianW x ≠ 0 := (gaussianW_pos x).ne'
+lemma gaussianW_ne_zero (x : ℝ) : Real.exp (-(x ^ 2 / 2)) ≠ 0 := (gaussianW_pos x).ne'
 
 /-- The normalised Gaussian density `e^{-x²/2} / √(2π)`. -/
-noncomputable def gaussianDensity (x : ℝ) : ℝ := (Real.sqrt (2 * Real.pi))⁻¹ * gaussianW x
+noncomputable def gaussianDensity (x : ℝ) : ℝ := (Real.sqrt (2 * Real.pi))⁻¹ * Real.exp (-(x ^ 2/2))
 
 lemma gaussianPDFReal_zero_one_eq (x : ℝ) :
     ProbabilityTheory.gaussianPDFReal 0 1 x = gaussianDensity x := by
   have hcoe : ((1 : NNReal) : ℝ) = 1 := NNReal.coe_one
   rw [ProbabilityTheory.gaussianPDFReal_def]
-  simp only [hcoe, mul_one, sub_zero, gaussianDensity, gaussianW]
+  simp only [hcoe, mul_one, sub_zero, gaussianDensity]
   have harg : -x ^ 2 / (2 : ℝ) = -(x ^ 2 / 2) := by ring
   rw [harg]
 
-lemma hasDerivAt_gaussianW (x : ℝ) : HasDerivAt gaussianW (-x * Real.exp (-(x ^ 2 / 2))) x := by
-  have hpow : HasDerivAt (fun y : ℝ => -(y ^ 2 / 2)) (-x) x := by
-    have h2 : HasDerivAt (fun y : ℝ => y ^ 2 / 2) ((2 * x ^ 1) / 2) x :=
-      (hasDerivAt_pow 2 x).div_const 2
-    have hneg : HasDerivAt (fun y : ℝ => -(y ^ 2 / 2)) (-((2 * x ^ 1) / 2)) x := h2.neg
-    convert hneg using 1
-    ring
-  have hexp : HasDerivAt (fun y : ℝ => Real.exp (-(y ^ 2 / 2)))
-      (Real.exp (-(x ^ 2 / 2)) * (-x)) x := hpow.exp
-  have hval : Real.exp (-(x ^ 2 / 2)) * (-x) = -x * Real.exp (-(x ^ 2 / 2)) := by ring
-  rw [hval] at hexp
-  exact hexp
+-- lemma hasDerivAt_gaussianW (x : ℝ) : HasDerivAt gaussianW (-x * Real.exp (-(x ^ 2 / 2))) x := by
+--   have hpow : HasDerivAt (fun y : ℝ => -(y ^ 2 / 2)) (-x) x := by
+--     have h2 : HasDerivAt (fun y : ℝ => y ^ 2 / 2) ((2 * x ^ 1) / 2) x :=
+--       (hasDerivAt_pow 2 x).div_const 2
+--     have hneg : HasDerivAt (fun y : ℝ => -(y ^ 2 / 2)) (-((2 * x ^ 1) / 2)) x := h2.neg
+--     convert hneg using 1
+--     ring
+--   have hexp : HasDerivAt (fun y : ℝ => Real.exp (-(y ^ 2 / 2)))
+--       (Real.exp (-(x ^ 2 / 2)) * (-x)) x := hpow.exp
+--   have hval : Real.exp (-(x ^ 2 / 2)) * (-x) = -x * Real.exp (-(x ^ 2 / 2)) := by ring
+--   rw [hval] at hexp
+--   exact hexp
 
-lemma deriv_gaussianW (x : ℝ) : deriv gaussianW x = -x * gaussianW x :=
-  (hasDerivAt_gaussianW x).deriv
-
+#check Real.hasDerivAt_mulExpNegMulSq
+lemma deriv_gaussianW (x : ℝ) : deriv (fun x ↦ Real.exp (-(x ^ 2 / 2))) x =
+      -x * Real.exp (-(x ^ 2 / 2)) := by
+  sorry
 /-! ### Integrability of polynomials against the Gaussian weight -/
 
 lemma integrable_pow_mul_gaussianW (n : ℕ) :
-    MeasureTheory.Integrable (fun x : ℝ => x ^ n * gaussianW x) := by
+    MeasureTheory.Integrable (fun x : ℝ => x ^ n * Real.exp (-(x ^ 2 / 2))) := by
   have hb : (0 : ℝ) < 1 / 2 := by norm_num
   have hs : (-1 : ℝ) < (n : ℝ) := by
     have hn : (0 : ℝ) ≤ (n : ℝ) := Nat.cast_nonneg n
@@ -390,12 +392,11 @@ lemma integrable_pow_mul_gaussianW (n : ℕ) :
   have hx : x ^ (n : ℝ) = x ^ n := Real.rpow_natCast x n
   have harg : -(1 / 2 : ℝ) * x ^ 2 = -(x ^ 2 / 2) := by ring
   rw [hx, harg]
-  simp only [gaussianW]
 
 lemma integrable_poly_mul_gaussianW (p : ℝ[X]) :
-    MeasureTheory.Integrable (fun x : ℝ => p.eval x * gaussianW x) := by
-  have hrw : (fun x : ℝ => p.eval x * gaussianW x)
-      = fun x : ℝ => ∑ i ∈ p.support, p.coeff i * (x ^ i * gaussianW x) := by
+    MeasureTheory.Integrable (fun x : ℝ => p.eval x * Real.exp (-(x ^ 2 / 2))) := by
+  have hrw : (fun x : ℝ => p.eval x * Real.exp (-(x ^ 2 / 2)))
+      = fun x : ℝ => ∑ i ∈ p.support, p.coeff i * (x ^ i * Real.exp (-(x ^ 2 / 2))) := by
     funext x
     rw [eval_eq_sum, Polynomial.sum, Finset.sum_mul]
     exact Finset.sum_congr rfl fun i _ => by ring
@@ -412,50 +413,55 @@ lemma integrable_poly_mul_gaussianDensity (p : ℝ[X]) :
 /-! ### The Stein / integration-by-parts identity -/
 
 lemma integral_X_mul_gaussianW (p : ℝ[X]) :
-    ∫ x : ℝ, (X * p).eval x * gaussianW x
-      = ∫ x : ℝ, (derivative p).eval x * gaussianW x := by
+    ∫ x : ℝ, (X * p).eval x * Real.exp (-(x ^ 2 / 2))
+      = ∫ x : ℝ, (derivative p).eval x * Real.exp (-(x ^ 2 / 2)) := by
   let f : ℝ → ℝ := fun x => p.eval x
   have hf_hasDeriv : ∀ x, HasDerivAt f ((derivative p).eval x) x := fun x => p.hasDerivAt x
   have hderiv_f : ∀ x, (fderiv ℝ f x) (1 : ℝ) = (derivative p).eval x := by
     intro x
     have := (hf_hasDeriv x).deriv
     rw [fderiv_apply_one_eq_deriv]; exact this
-  have hderiv_g : ∀ x, (fderiv ℝ gaussianW x) (1 : ℝ) = -x * gaussianW x := by
+  have hderiv_g : ∀ x, (fderiv ℝ (fun x => Real.exp (-(x ^ 2 / 2))) x) (1 : ℝ)
+      = -x * Real.exp (-(x ^ 2 / 2)) := by
     intro x
-    rw [fderiv_apply_one_eq_deriv]; exact deriv_gaussianW x
-  have hXeval : ∀ x, (X * p).eval x * gaussianW x
-      = -(f x * (fderiv ℝ gaussianW x) (1 : ℝ)) := by
+    rw [fderiv_apply_one_eq_deriv]
+    --exact deriv_gaussianW x
+    sorry
+  have hXeval : ∀ x, (X * p).eval x * Real.exp (-(x ^ 2 / 2))
+      = -(f x * (fderiv ℝ (fun x => Real.exp (-(x ^ 2 / 2))) x) (1 : ℝ)) := by
     intro x
     rw [hderiv_g x]
     simp only [f, eval_mul, eval_X]
     ring
-  have hInt_fg : MeasureTheory.Integrable (fun x => f x * gaussianW x) :=
-       integrable_poly_mul_gaussianW p
-  have hInt_f'g : MeasureTheory.Integrable (fun x => (fderiv ℝ f x) (1 : ℝ) * gaussianW x) := by
+  have hInt_fg : MeasureTheory.Integrable (fun x => f x * Real.exp (-(x ^ 2 / 2))) :=
+    integrable_poly_mul_gaussianW p
+  have hInt_f'g : MeasureTheory.Integrable
+      (fun x => (fderiv ℝ f x) (1 : ℝ) * Real.exp (-(x ^ 2 / 2))) := by
     refine (integrable_poly_mul_gaussianW (derivative p)).congr ?_
     filter_upwards with x
     rw [hderiv_f x]
-  have hInt_fg' : MeasureTheory.Integrable (fun x => f x * (fderiv ℝ gaussianW x) (1 : ℝ)) := by
+  have hInt_fg' : MeasureTheory.Integrable
+      (fun x => f x * (fderiv ℝ (fun x => Real.exp (-(x ^ 2 / 2))) x) (1 : ℝ)) := by
     refine ((integrable_poly_mul_gaussianW (X * p)).neg).congr ?_
     filter_upwards with x
     simp only [Pi.neg_apply]
     rw [hXeval x, neg_neg]
-  have hdiff_f : ∀ x ∈ tsupport gaussianW, DifferentiableAt ℝ f x := fun x _ =>
-    (hf_hasDeriv x).differentiableAt
-  have hdiff_g : ∀ x ∈ tsupport f, DifferentiableAt ℝ gaussianW x := fun x _ =>
-    (hasDerivAt_gaussianW x).differentiableAt
-  have IBP : (∫ x, f x * (fderiv ℝ gaussianW x) (1 : ℝ))
-        = -∫ x, (fderiv ℝ f x) (1 : ℝ) * gaussianW x :=
+  have hdiff_f : ∀ x ∈ tsupport (fun x => Real.exp (-(x ^ 2 / 2))), DifferentiableAt ℝ f x :=
+    fun x _ => (hf_hasDeriv x).differentiableAt
+  have hdiff_g : ∀ x ∈ tsupport f, DifferentiableAt ℝ (fun x => Real.exp (-(x ^ 2 / 2))) x :=
+    sorry
+  have IBP : (∫ x, f x * (fderiv ℝ (fun x => Real.exp (-(x ^ 2 / 2))) x) (1 : ℝ))
+      = -∫ x, (fderiv ℝ f x) (1 : ℝ) * Real.exp (-(x ^ 2 / 2)) :=
     integral_mul_fderiv_eq_neg_fderiv_mul_of_integrable
       (v := (1 : ℝ)) hInt_f'g hInt_fg' hInt_fg hdiff_f hdiff_g
-  have hL : (∫ x, f x * (fderiv ℝ gaussianW x) (1 : ℝ))
-      = -∫ x, (X * p).eval x * gaussianW x := by
+  have hL : (∫ x, f x * (fderiv ℝ (fun x => Real.exp (-(x ^ 2 / 2))) x) (1 : ℝ))
+      = -∫ x, (X * p).eval x * Real.exp (-(x ^ 2 / 2)) := by
     rw [← MeasureTheory.integral_neg]
     refine MeasureTheory.integral_congr_ae ?_
     filter_upwards with x
     rw [hXeval x, neg_neg]
-  have hR : (∫ x, (fderiv ℝ f x) (1 : ℝ) * gaussianW x)
-      = ∫ x, (derivative p).eval x * gaussianW x := by
+  have hR : (∫ x, (fderiv ℝ f x) (1 : ℝ) * Real.exp (-(x ^ 2 / 2)))
+      = ∫ x, (derivative p).eval x * Real.exp (-(x ^ 2 / 2)) := by
     refine MeasureTheory.integral_congr_ae ?_
     filter_upwards with x
     rw [hderiv_f x]
@@ -573,7 +579,7 @@ lemma gaussianFunctional_stein (p : Polynomial ℝ) :
   simp only [gaussianFunctional_apply]
   have hc : ∀ q : ℝ[X],
       (∫ x : ℝ, q.eval x * gaussianDensity x)
-        = (Real.sqrt (2 * Real.pi))⁻¹ * ∫ x : ℝ, q.eval x * gaussianW x := by
+        = (Real.sqrt (2 * Real.pi))⁻¹ * ∫ x : ℝ, q.eval x * Real.exp (-(x ^ 2 / 2)) := by
     intro q
     rw [← MeasureTheory.integral_const_mul]
     refine MeasureTheory.integral_congr_ae ?_
@@ -674,9 +680,18 @@ noncomputable def hermiteL2 (n : ℕ) : Lp ℝ 2 (gaussianReal 0 1) :=
 lemma inner_hermiteL2 (m n : ℕ) : ⟪hermiteL2 m, hermiteL2 n⟫ =
       ∫ x : ℝ, (hermite ℝ m).eval x * (hermite ℝ n).eval x * gaussianDensity x := by
   rw [MeasureTheory.L2.inner_def]
-  simp only [Real.inner_apply]
-  --unfold
-  sorry
+  simp only [RCLike.inner_apply, conj_trivial]
+  have key : (fun x => (hermiteL2 n : ℝ → ℝ) x * (hermiteL2 m : ℝ → ℝ) x)
+      =ᵐ[gaussianReal 0 1] fun x => (hermite ℝ m).eval x * (hermite ℝ n).eval x := by
+    filter_upwards [(hermite_memLp m).coeFn_toLp, (hermite_memLp n).coeFn_toLp] with x hm hn
+    simp only [hermiteL2]
+    rw [hm, hn]; ring
+  rw [integral_congr_ae key, gaussianReal_of_var_ne_zero]
+  --rw [integral_withDensity_eq_integral_smul (measurable_gaussianPDF 0 1)]
+  · simp only [gaussianDensity]
+    --rw [integral_withDensity_eq_integral_smul₀ (measurable_gaussianPDF 0 1).aemeasurable]
+    sorry
+  exact Ne.symm zero_ne_one
 
 
 -- **`‖Hₙ‖² = n!` in `L²(γ)`** — in particular `hermiteL2` is *not* orthonormal.
@@ -763,7 +778,7 @@ an orthonormal family whose span is *dense*. Contrast `Module.Basis`, which requ
 algebraic span to be everything. -/
 noncomputable def hermiteHilbertBasis : HilbertBasis ℕ ℝ (Lp ℝ 2 (gaussianReal 0 1)) :=
   HilbertBasis.mk hermiteHat_orthonormal
-    (by rw [← hermiteHat_dense]; exact le_refl _)
+    (hermiteHat_dense.ge)
 
 /-! ### Restatement over `ℤ` -/
 
