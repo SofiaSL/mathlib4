@@ -643,8 +643,7 @@ theorem integrable_polynomial_mul_gaussian {b : ℝ} (hb : 0 < b) (p : ℝ[X]) :
     (integrable_pow_mul_gaussian hb i).const_mul (p.coeff i)
 
 /-- Hermite polynomials are in `L²` of the standard Gaussian. -/
-lemma hermite_memLp (n : ℕ) :
-    MemLp (fun x => (hermite ℝ n).eval x) 2 (gaussianReal 0 1) := by
+lemma hermite_memLp (n : ℕ) : MemLp (fun x => (hermite ℝ n).eval x) 2 (gaussianReal 0 1) := by
   have hmeas :
       AEStronglyMeasurable
         (fun x : ℝ => (hermite ℝ n).eval x)
@@ -654,22 +653,15 @@ lemma hermite_memLp (n : ℕ) :
   rw [gaussianReal_of_var_ne_zero 0 (by norm_num : (1 : NNReal) ≠ 0)]
   rw [integrable_withDensity_iff
     (measurable_gaussianPDF 0 1)]
-  have h :=
-    integrable_polynomial_mul_gaussian
-      (b := (1 / 2 : ℝ))
-      (by norm_num)
-      ((hermite ℝ n) ^ 2)
-  have hc :=
-    h.mul_const (Real.sqrt (2 * Real.pi))⁻¹
-  convert hc using 1
-  rfl
-
-  --funext x
-  simp only [toReal_gaussianPDF,gaussianPDFReal,Polynomial.eval_pow]
-  ring_nf
-  simp
-  funext x
-  ring
+  · have h := integrable_polynomial_mul_gaussian (b := (1 / 2 : ℝ)) (by norm_num) ((hermite ℝ n)^2)
+    have hc := h.mul_const (Real.sqrt (2 * Real.pi))⁻¹
+    convert hc using 1
+    · rfl
+    simp only [toReal_gaussianPDF,gaussianPDFReal,Polynomial.eval_pow]
+    ring_nf
+    simp only [NNReal.coe_one, mul_one, Nat.ofNat_nonneg, Real.sqrt_mul', mul_inv_rev, inv_one]
+    funext x
+    ring
   filter_upwards
   intro x
   simp [gaussianPDF]
