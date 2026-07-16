@@ -691,12 +691,8 @@ lemma inner_hermiteL2 (m n : ℕ) : ⟪hermiteL2 m, hermiteL2 n⟫ =
     filter_upwards [(hermite_memLp m).coeFn_toLp, (hermite_memLp n).coeFn_toLp] with x hm hn
     simp only [hermiteL2]
     rw [hm, hn]; ring
-  rw [integral_congr_ae key, gaussianReal_of_var_ne_zero]
-  --rw [integral_withDensity_eq_integral_smul (measurable_gaussianPDF 0 1)]
-  · simp only [gaussianDensity]
-    --rw [integral_withDensity_eq_integral_smul₀ (measurable_gaussianPDF 0 1).aemeasurable]
-    sorry
-  exact Ne.symm zero_ne_one
+  rw [integral_congr_ae key]
+  exact integral_gaussianReal_eq _
 
 
 -- **`‖Hₙ‖² = n!` in `L²(γ)`** — in particular `hermiteL2` is *not* orthonormal.
