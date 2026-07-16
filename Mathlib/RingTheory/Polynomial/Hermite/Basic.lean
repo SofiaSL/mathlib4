@@ -360,24 +360,6 @@ lemma gaussianPDFReal_zero_one_eq (x : ℝ) :
   have harg : -x ^ 2 / (2 : ℝ) = -(x ^ 2 / 2) := by ring
   rw [harg]
 
--- lemma hasDerivAt_gaussianW (x : ℝ) : HasDerivAt gaussianW (-x * Real.exp (-(x ^ 2 / 2))) x := by
---   have hpow : HasDerivAt (fun y : ℝ => -(y ^ 2 / 2)) (-x) x := by
---     have h2 : HasDerivAt (fun y : ℝ => y ^ 2 / 2) ((2 * x ^ 1) / 2) x :=
---       (hasDerivAt_pow 2 x).div_const 2
---     have hneg : HasDerivAt (fun y : ℝ => -(y ^ 2 / 2)) (-((2 * x ^ 1) / 2)) x := h2.neg
---     convert hneg using 1
---     ring
---   have hexp : HasDerivAt (fun y : ℝ => Real.exp (-(y ^ 2 / 2)))
---       (Real.exp (-(x ^ 2 / 2)) * (-x)) x := hpow.exp
---   have hval : Real.exp (-(x ^ 2 / 2)) * (-x) = -x * Real.exp (-(x ^ 2 / 2)) := by ring
---   rw [hval] at hexp
---   exact hexp
-
--- lemma deriv_gaussianW (x : ℝ) : deriv (fun x ↦ Real.exp (-(x ^ 2 / 2))) x =
---       -x * Real.exp (-(x ^ 2 / 2)) := by
---   sorry
-/-! ### Integrability of polynomials against the Gaussian weight -/
-
 lemma integrable_pow_mul_gaussianW (n : ℕ) :
     MeasureTheory.Integrable (fun x : ℝ => x ^ n * Real.exp (-(x ^ 2 / 2))) := by
   have hb : (0 : ℝ) < 1 / 2 := by norm_num
