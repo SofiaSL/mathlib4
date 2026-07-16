@@ -7,7 +7,7 @@ module
 
 public import Mathlib.Algebra.Polynomial.Derivative
 public import Mathlib.Data.Nat.Factorial.DoubleFactorial
-public import  Mathlib.Data.Real.Basic
+public import Mathlib.Data.Real.Basic
 
 public import Mathlib.MeasureTheory.Integral.Bochner.Basic  -- ∫ x, f x
 public import Mathlib.Algebra.Module.LinearMap.Defs         -- →ₗ[R]
@@ -84,7 +84,7 @@ section Defs
 
 variable (R : Type*) [CommRing R]
 
-/-- the probabilists' Hermite polynomials. -/
+/-- The probabilists' Hermite polynomials. -/
 noncomputable def hermite : ℕ → Polynomial R
   | 0 => 1
   | n + 1 => X * hermite n - derivative (hermite n)
@@ -308,87 +308,68 @@ namespace HermiteOrthogonality
 /-!
 # Orthogonality of the probabilists' Hermite polynomials in `L²` of the standard Gaussian
 
-## Structure of this file
+The argument factors through an abstract step (`hermite_orthogonal_of_stein`): any linear
+functional `G` on `ℝ[X]` with `G 1 = 1` and the Stein identity `G (X * p) = G (p')` satisfies
+`G (Hₘ Hₙ) = δₘₙ · n!`. Specialising `G` to integration against the Gaussian density
+(`gaussianFunctional`) gives `hermite_orthogonal_gaussian`. Lifting `Hₙ` to
+`Lp ℝ 2 (gaussianReal 0 1)` and normalising (`hermiteL2`, `hermiteHat`) yields an orthonormal
+family (`hermiteHat_orthonormal`) with dense span (`hermiteHat_dense`), bundled as
+`hermiteHilbertBasis`.
 
-* `hermiteInner` / `hermite_orthogonal_of_stein` : the *abstract* orthogonality argument.
-  Any linear functional `G` with `G 1 = 1` and the Stein identity `G (X * p) = G (p')`
-  satisfies `G (Hₘ Hₙ) = δₘₙ · n!`. This part is pure algebra and is fully proved.
-* `gaussianFunctional` : the concrete `G`, given by integration against the Gaussian density.
-* `hermite_orthogonal_gaussian` : the concrete orthogonality relation, fully proved.
-* `hermiteL2` / `hermiteHat` : the lift to `Lp ℝ 2 (gaussianReal 0 1)`, unnormalised and
-  normalised.
-* `inner_hermiteL2`, `norm_hermiteL2` : the inner product in `Lp` *is* the weighted integral.
-* `hermiteHat_orthonormal` : `Orthonormal ℝ hermiteHat`.
-* `hermiteHat_dense` : the closure of the span is `⊤` — this is the correct `L²` completeness
-  statement, and is *not* `Module.Basis.span_eq` (see the note below).
-
-## Note on `Orthonormal`
-
-`Orthonormal ℝ hermiteL2` is **false**: `‖Hₙ‖² = n!`, not `1`. Only the normalised family
-`hermiteHat n = Hₙ / √(n!)` is orthonormal. This is `hermiteHat_orthonormal`.
-
-## Note on `Module.Basis.span_eq`
-
-`Module.Basis.span_eq` asserts `Submodule.span R (Set.range b) = ⊤` for an *algebraic* basis:
-every vector is a **finite** linear combination of basis vectors. The Hermite polynomials do
-**not** satisfy this in `L²(γ)`: their algebraic span is the (dense, proper) subspace of
-polynomial functions. An infinite-dimensional Banach space has no countable Hamel basis
-(Baire category), so no countable family can satisfy `Basis.span_eq` here.
-
-The correct completeness statement is topological density, `hermiteHat_dense`, and the
-correct bundled structure is `HilbertBasis ℕ ℝ (Lp ℝ 2 (gaussianReal 0 1))`, which is
-`Orthonormal` + dense span — provided below as `hermiteHilbertBasis`.
+Two caveats on the statements:
+* `Orthonormal ℝ hermiteL2` is **false** (`‖Hₙ‖² = n!`); only `hermiteHat n = Hₙ / √(n!)` is.
+* Topological density, not `Module.Basis.span_eq`, is the correct completeness statement: the
+  Hermite polynomials span only the *proper* (dense) subspace of polynomial functions, and an
+  infinite-dimensional Banach space has no countable Hamel basis. Hence the bundled form is a
+  `HilbertBasis` (orthonormal + dense span), not a `Module.Basis`.
 -/
 
 open MeasureTheory ProbabilityTheory Filter
 open scoped Nat RealInnerProductSpace ENNReal Topology
 
-/-! ### The Gaussian weight -/
+/-! ### Gaussian integrability of polynomials
 
-/-- The unnormalised Gaussian weight `e^{-x²/2}`. -/
---noncomputable def gaussianW (x : ℝ) : ℝ := Real.exp (-(x ^ 2 / 2))
---
-@[simp] lemma gaussianW_pos (x : ℝ) : 0 < Real.exp (-(x ^ 2 / 2)) := Real.exp_pos _
+The Gaussian weight decays faster than any polynomial grows, so `p(x) · e^{-b x²}` is integrable
+for every `b > 0`. The Stein identity and the `L²` estimates below are all the case `b = ½`. -/
 
-lemma gaussianW_ne_zero (x : ℝ) : Real.exp (-(x ^ 2 / 2)) ≠ 0 := (gaussianW_pos x).ne'
+theorem integrable_pow_mul_gaussian {b : ℝ} (hb : 0 < b) (n : ℕ) :
+    Integrable (fun x : ℝ => x ^ n * Real.exp (-b * x ^ 2)) := by
+  have hs : (-1 : ℝ) < (n : ℝ) := neg_one_lt_zero.trans_le (Nat.cast_nonneg n)
+  simpa [Real.rpow_natCast] using integrable_rpow_mul_exp_neg_mul_sq hb hs
 
-/-- The normalised Gaussian density `e^{-x²/2} / √(2π)`. -/
-noncomputable def gaussianDensity (x : ℝ) : ℝ := (Real.sqrt (2 * Real.pi))⁻¹ * Real.exp (-(x ^ 2/2))
-
-lemma gaussianPDFReal_zero_one_eq (x : ℝ) :
-    ProbabilityTheory.gaussianPDFReal 0 1 x = gaussianDensity x := by
-  have hcoe : ((1 : NNReal) : ℝ) = 1 := NNReal.coe_one
-  rw [ProbabilityTheory.gaussianPDFReal_def]
-  simp only [hcoe, mul_one, sub_zero, gaussianDensity]
-  have harg : -x ^ 2 / (2 : ℝ) = -(x ^ 2 / 2) := by ring
-  rw [harg]
-
-lemma integrable_pow_mul_gaussianW (n : ℕ) :
-    MeasureTheory.Integrable (fun x : ℝ => x ^ n * Real.exp (-(x ^ 2 / 2))) := by
-  have hb : (0 : ℝ) < 1 / 2 := by norm_num
-  have hs : (-1 : ℝ) < (n : ℝ) := by
-    have hn : (0 : ℝ) ≤ (n : ℝ) := Nat.cast_nonneg n
-    linarith
-  have key : MeasureTheory.Integrable (fun x : ℝ => x ^ (n : ℝ) * Real.exp (-(1 / 2) * x ^ 2)) :=
-    integrable_rpow_mul_exp_neg_mul_sq hb hs
-  refine key.congr ?_
-  filter_upwards with x
-  have hx : x ^ (n : ℝ) = x ^ n := Real.rpow_natCast x n
-  have harg : -(1 / 2 : ℝ) * x ^ 2 = -(x ^ 2 / 2) := by ring
-  rw [hx, harg]
-
-lemma integrable_poly_mul_gaussianW (p : ℝ[X]) :
-    MeasureTheory.Integrable (fun x : ℝ => p.eval x * Real.exp (-(x ^ 2 / 2))) := by
-  have hrw : (fun x : ℝ => p.eval x * Real.exp (-(x ^ 2 / 2)))
-      = fun x : ℝ => ∑ i ∈ p.support, p.coeff i * (x ^ i * Real.exp (-(x ^ 2 / 2))) := by
+theorem integrable_polynomial_mul_gaussian {b : ℝ} (hb : 0 < b) (p : ℝ[X]) :
+    Integrable (fun x : ℝ => p.eval x * Real.exp (-b * x ^ 2)) := by
+  have hsum : (fun x : ℝ => p.eval x * Real.exp (-b * x ^ 2)) =
+      fun x : ℝ => ∑ i ∈ Finset.range (p.natDegree + 1),
+        p.coeff i * (x ^ i * Real.exp (-b * x ^ 2)) := by
     funext x
-    rw [eval_eq_sum, Polynomial.sum, Finset.sum_mul]
-    exact Finset.sum_congr rfl fun i _ => by ring
-  rw [hrw]
-  exact MeasureTheory.integrable_finsetSum _ fun i _ => (integrable_pow_mul_gaussianW i).const_mul _
+    rw [Polynomial.eval_eq_sum_range, Finset.sum_mul]
+    simp only [mul_assoc]
+  rw [hsum]
+  exact integrable_finsetSum _ fun i _ => (integrable_pow_mul_gaussian hb i).const_mul (p.coeff i)
+
+/-! ### The standard Gaussian density -/
+
+/-- The standard Gaussian density `e^{-x²/2} / √(2π)`; this is `gaussianPDFReal 0 1`
+(see `gaussianPDFReal_zero_one_eq`). -/
+noncomputable def gaussianDensity (x : ℝ) : ℝ :=
+  (Real.sqrt (2 * Real.pi))⁻¹ * Real.exp (-(x ^ 2 / 2))
+
+lemma gaussianPDFReal_zero_one_eq (x : ℝ) : gaussianPDFReal 0 1 x = gaussianDensity x := by
+  rw [gaussianPDFReal_def, gaussianDensity]
+  simp only [NNReal.coe_one, mul_one, sub_zero]
+  rw [show -x ^ 2 / (2 : ℝ) = -(x ^ 2 / 2) by ring]
+
+/-- `p(x) · e^{-x²/2}` is integrable: the case `b = ½` of `integrable_polynomial_mul_gaussian`,
+in the form consumed by the Stein identity. -/
+lemma integrable_poly_mul_gaussianW (p : ℝ[X]) :
+    Integrable (fun x : ℝ => p.eval x * Real.exp (-(x ^ 2 / 2))) := by
+  refine (integrable_polynomial_mul_gaussian (b := 1 / 2) (by norm_num) p).congr ?_
+  filter_upwards with x
+  rw [show -(1 / 2 : ℝ) * x ^ 2 = -(x ^ 2 / 2) by ring]
 
 lemma integrable_poly_mul_gaussianDensity (p : ℝ[X]) :
-    MeasureTheory.Integrable (fun x : ℝ => p.eval x * gaussianDensity x) := by
+    Integrable (fun x : ℝ => p.eval x * gaussianDensity x) := by
   refine ((integrable_poly_mul_gaussianW p).const_mul (Real.sqrt (2 * Real.pi))⁻¹).congr ?_
   filter_upwards with x
   simp only [gaussianDensity]
@@ -540,15 +521,15 @@ noncomputable def gaussianFunctional : Polynomial ℝ →ₗ[ℝ] ℝ :=
     map_add' := by
       intro p q
       simp only [eval_add]
-      rw [← MeasureTheory.integral_add (integrable_poly_mul_gaussianDensity p)
+      rw [← integral_add (integrable_poly_mul_gaussianDensity p)
         (integrable_poly_mul_gaussianDensity q)]
-      refine MeasureTheory.integral_congr_ae ?_
+      refine integral_congr_ae ?_
       filter_upwards with x; ring
     map_smul' := by
       intro c p
       simp only [eval_smul, smul_eq_mul, RingHom.id_apply]
-      rw [← MeasureTheory.integral_const_mul]
-      refine MeasureTheory.integral_congr_ae ?_
+      rw [← integral_const_mul]
+      refine integral_congr_ae ?_
       filter_upwards with x; ring }
 
 lemma gaussianFunctional_apply (p : Polynomial ℝ) :
@@ -557,10 +538,8 @@ lemma gaussianFunctional_apply (p : Polynomial ℝ) :
 lemma gaussianFunctional_one : gaussianFunctional 1 = 1 := by
   rw [gaussianFunctional_apply]
   simp only [eval_one, one_mul]
-  have : ∀ x : ℝ, gaussianDensity x = ProbabilityTheory.gaussianPDFReal 0 1 x := fun x =>
-    (gaussianPDFReal_zero_one_eq x).symm
-  simp_rw [this]
-  exact ProbabilityTheory.integral_gaussianPDFReal_eq_one 0 one_ne_zero
+  simp_rw [← gaussianPDFReal_zero_one_eq]
+  exact integral_gaussianPDFReal_eq_one 0 one_ne_zero
 
 lemma gaussianFunctional_stein (p : Polynomial ℝ) :
     gaussianFunctional (X * p) = gaussianFunctional (derivative p) := by
@@ -569,8 +548,8 @@ lemma gaussianFunctional_stein (p : Polynomial ℝ) :
       (∫ x : ℝ, q.eval x * gaussianDensity x)
         = (Real.sqrt (2 * Real.pi))⁻¹ * ∫ x : ℝ, q.eval x * Real.exp (-(x ^ 2 / 2)) := by
     intro q
-    rw [← MeasureTheory.integral_const_mul]
-    refine MeasureTheory.integral_congr_ae ?_
+    rw [← integral_const_mul]
+    refine integral_congr_ae ?_
     filter_upwards with x
     simp only [gaussianDensity]; ring
   rw [hc (X * p), hc (derivative p), integral_X_mul_gaussianW p]
@@ -596,8 +575,7 @@ integral `∫ f g e^{-x²/2}/√(2π) dx` via `gaussianReal_eq_withDensity`.
 /-- The Gaussian measure has `gaussianDensity` as its density with respect to `volume`. -/
 lemma gaussianReal_eq_withDensity :
     (gaussianReal 0 1) = volume.withDensity (fun x => ENNReal.ofReal (gaussianDensity x)) := by
-  rw [ProbabilityTheory.gaussianReal_of_var_ne_zero _ one_ne_zero,
-    ProbabilityTheory.gaussianPDF_def]
+  rw [gaussianReal_of_var_ne_zero _ one_ne_zero, gaussianPDF_def]
   congr 1 with x
   rw [gaussianPDFReal_zero_one_eq]
 
@@ -605,36 +583,11 @@ lemma gaussianReal_eq_withDensity :
 This is `ProbabilityTheory.integral_gaussianReal_eq_integral_smul` with the density rewritten. -/
 lemma integral_gaussianReal_eq (f : ℝ → ℝ) :
     (∫ x, f x ∂(gaussianReal 0 1)) = ∫ x, f x * gaussianDensity x := by
-  rw [ProbabilityTheory.integral_gaussianReal_eq_integral_smul one_ne_zero]
-  refine MeasureTheory.integral_congr_ae ?_
+  rw [integral_gaussianReal_eq_integral_smul one_ne_zero]
+  refine integral_congr_ae ?_
   filter_upwards with x
   rw [smul_eq_mul, gaussianPDFReal_zero_one_eq]
   ring
-
-theorem integrable_pow_mul_gaussian {b : ℝ} (hb : 0 < b) (n : ℕ) :
-    Integrable (fun x : ℝ => x ^ n * Real.exp (-b * x ^ 2)) := by
-  -- Mathlib's `integrable_rpow_mul_exp_neg_mul_sq` gives this for a *real*
-  -- exponent `s > -1`; specialize to `s = n` and rewrite the real power
-  -- `x ^ (n : ℝ)` as the monomial `x ^ n`.
-  have hs : (-1 : ℝ) < (n : ℝ) := neg_one_lt_zero.trans_le (Nat.cast_nonneg n)
-  simpa [Real.rpow_natCast] using integrable_rpow_mul_exp_neg_mul_sq hb hs
-
-theorem integrable_polynomial_mul_gaussian {b : ℝ} (hb : 0 < b) (p : ℝ[X]) :
-    Integrable (fun x : ℝ => p.eval x * Real.exp (-b * x ^ 2)) := by
-  -- Expand `p x` into its finitely many monomials:
-  --   `p x = ∑ i ∈ range (p.natDegree + 1), p.coeff i * x ^ i`.
-  have hsum : (fun x : ℝ => p.eval x * Real.exp (-b * x ^ 2)) =
-      fun x : ℝ =>
-        ∑ i ∈ Finset.range (p.natDegree + 1),
-          p.coeff i * (x ^ i * Real.exp (-b * x ^ 2)) := by
-    funext x
-    rw [Polynomial.eval_eq_sum_range, Finset.sum_mul]
-    simp only [mul_assoc]
-  rw [hsum]
-  -- A finite sum of integrable functions is integrable, and each summand is a
-  -- constant multiple of the integrable function `x ^ i * exp (-b * x ^ 2)`.
-  exact integrable_finsetSum _ fun i _ =>
-    (integrable_pow_mul_gaussian hb i).const_mul (p.coeff i)
 
 /-- Every polynomial is in `L²` of the standard Gaussian: the Gaussian weight kills the polynomial
 growth. -/
@@ -669,7 +622,7 @@ noncomputable def hermiteL2 (n : ℕ) : Lp ℝ 2 (gaussianReal 0 1) :=
 /-- The `Lp` inner product of two Hermite lifts is the weighted integral. -/
 lemma inner_hermiteL2 (m n : ℕ) : ⟪hermiteL2 m, hermiteL2 n⟫ =
       ∫ x : ℝ, (hermite ℝ m).eval x * (hermite ℝ n).eval x * gaussianDensity x := by
-  rw [MeasureTheory.L2.inner_def]
+  rw [L2.inner_def]
   simp only [RCLike.inner_apply, conj_trivial]
   have key : (fun x => (hermiteL2 n : ℝ → ℝ) x * (hermiteL2 m : ℝ → ℝ) x)
       =ᵐ[gaussianReal 0 1] fun x => (hermite ℝ m).eval x * (hermite ℝ n).eval x := by
@@ -679,7 +632,7 @@ lemma inner_hermiteL2 (m n : ℕ) : ⟪hermiteL2 m, hermiteL2 n⟫ =
   rw [integral_congr_ae key]
   exact integral_gaussianReal_eq _
 
--- **`‖Hₙ‖² = n!` in `L²(γ)`** — in particular `hermiteL2` is *not* orthonormal.
+/-- `‖Hₙ‖² = n!` in `L²(γ)`; in particular `hermiteL2` is *not* orthonormal. -/
 lemma norm_hermiteL2_sq (n : ℕ) : ‖hermiteL2 n‖ ^ 2 = (n.factorial : ℝ) := by
   rw [← real_inner_self_eq_norm_sq, inner_hermiteL2, hermite_orthogonal_gaussian n n, if_pos rfl]
 
@@ -894,7 +847,7 @@ theorem hermiteHat_dense : (Submodule.span ℝ (Set.range hermiteHat)).topologic
   have hinner : ∀ n, ⟪hermiteL2 n, f⟫
       = ∫ x, (hermite ℝ n).eval x * (⇑f) x ∂(gaussianReal 0 1) := by
     intro n
-    rw [MeasureTheory.L2.inner_def]
+    rw [L2.inner_def]
     simp only [RCLike.inner_apply, conj_trivial]
     refine integral_congr_ae ?_
     filter_upwards [(hermite_memLp n).coeFn_toLp] with x hn
