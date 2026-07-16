@@ -373,10 +373,9 @@ lemma gaussianPDFReal_zero_one_eq (x : ℝ) :
 --   rw [hval] at hexp
 --   exact hexp
 
-#check Real.hasDerivAt_mulExpNegMulSq
-lemma deriv_gaussianW (x : ℝ) : deriv (fun x ↦ Real.exp (-(x ^ 2 / 2))) x =
-      -x * Real.exp (-(x ^ 2 / 2)) := by
-  sorry
+-- lemma deriv_gaussianW (x : ℝ) : deriv (fun x ↦ Real.exp (-(x ^ 2 / 2))) x =
+--       -x * Real.exp (-(x ^ 2 / 2)) := by
+--   sorry
 /-! ### Integrability of polynomials against the Gaussian weight -/
 
 lemma integrable_pow_mul_gaussianW (n : ℕ) :
@@ -426,7 +425,14 @@ lemma integral_X_mul_gaussianW (p : ℝ[X]) :
     intro x
     rw [fderiv_apply_one_eq_deriv]
     --exact deriv_gaussianW x
-    sorry
+    --convert (((((hasDerivAt_id x).pow 2).div_const 2).neg.exp).deriv) using 1 <;> ring_nf
+    rw [deriv_exp (by fun_prop)]
+    rw [show (fun x : ℝ ↦ -(x ^ 2 / 2)) = fun x : ℝ ↦ -(1/2) * x ^ 2 by funext y; ring,
+      deriv_const_mul _ ((differentiable_pow 2) x)]
+    simp only [one_div, differentiableAt_fun_id, deriv_fun_pow, Nat.cast_ofNat, Nat.add_one_sub_one,
+      pow_one, deriv_id'', mul_one, neg_mul, ne_eq, OfNat.ofNat_ne_zero, not_false_eq_true,
+      inv_mul_cancel_left₀, mul_neg, neg_inj]
+    ring
   have hXeval : ∀ x, (X * p).eval x * Real.exp (-(x ^ 2 / 2))
       = -(f x * (fderiv ℝ (fun x => Real.exp (-(x ^ 2 / 2))) x) (1 : ℝ)) := by
     intro x
@@ -448,12 +454,11 @@ lemma integral_X_mul_gaussianW (p : ℝ[X]) :
     rw [hXeval x, neg_neg]
   have hdiff_f : ∀ x ∈ tsupport (fun x => Real.exp (-(x ^ 2 / 2))), DifferentiableAt ℝ f x :=
     fun x _ => (hf_hasDeriv x).differentiableAt
-  have hdiff_g : ∀ x ∈ tsupport f, DifferentiableAt ℝ (fun x => Real.exp (-(x ^ 2 / 2))) x :=
-    sorry
   have IBP : (∫ x, f x * (fderiv ℝ (fun x => Real.exp (-(x ^ 2 / 2))) x) (1 : ℝ))
       = -∫ x, (fderiv ℝ f x) (1 : ℝ) * Real.exp (-(x ^ 2 / 2)) :=
-    integral_mul_fderiv_eq_neg_fderiv_mul_of_integrable
-      (v := (1 : ℝ)) hInt_f'g hInt_fg' hInt_fg hdiff_f hdiff_g
+  integral_mul_fderiv_eq_neg_fderiv_mul_of_integrable
+    (v := (1 : ℝ)) hInt_f'g hInt_fg' hInt_fg hdiff_f
+    (fun x _ => (((hasDerivAt_id x).pow 2).div_const 2).neg.exp.differentiableAt)
   have hL : (∫ x, f x * (fderiv ℝ (fun x => Real.exp (-(x ^ 2 / 2))) x) (1 : ℝ))
       = -∫ x, (X * p).eval x * Real.exp (-(x ^ 2 / 2)) := by
     rw [← MeasureTheory.integral_neg]
