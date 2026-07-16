@@ -306,7 +306,6 @@ namespace HermiteOrthogonality
 
 ## Structure of this file
 
-* `gaussianW`, `gaussianDensity` : the weight `e^{-x²/2}` and its normalisation `e^{-x²/2}/√(2π)`.
 * `hermiteInner` / `hermite_orthogonal_of_stein` : the *abstract* orthogonality argument.
   Any linear functional `G` with `G 1 = 1` and the Stein identity `G (X * p) = G (p')`
   satisfies `G (Hₘ Hₙ) = δₘₙ · n!`. This part is pure algebra and is fully proved.
@@ -406,8 +405,6 @@ lemma integral_X_mul_gaussianW (p : ℝ[X]) :
       = -x * Real.exp (-(x ^ 2 / 2)) := by
     intro x
     rw [fderiv_apply_one_eq_deriv]
-    --exact deriv_gaussianW x
-    --convert (((((hasDerivAt_id x).pow 2).div_const 2).neg.exp).deriv) using 1 <;> ring_nf
     rw [deriv_exp (by fun_prop)]
     rw [show (fun x : ℝ ↦ -(x ^ 2 / 2)) = fun x : ℝ ↦ -(1/2) * x ^ 2 by funext y; ring,
       deriv_const_mul _ ((differentiable_pow 2) x)]
@@ -675,7 +672,6 @@ lemma inner_hermiteL2 (m n : ℕ) : ⟪hermiteL2 m, hermiteL2 n⟫ =
     rw [hm, hn]; ring
   rw [integral_congr_ae key]
   exact integral_gaussianReal_eq _
-
 
 -- **`‖Hₙ‖² = n!` in `L²(γ)`** — in particular `hermiteL2` is *not* orthonormal.
 lemma norm_hermiteL2_sq (n : ℕ) : ‖hermiteL2 n‖ ^ 2 = (n.factorial : ℝ) := by
