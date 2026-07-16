@@ -671,14 +671,15 @@ noncomputable def hermiteL2 (n : ℕ) : Lp ℝ 2 (gaussianReal 0 1) :=
   (hermite_memLp n).toLp (fun x => (hermite ℝ n).eval x)
 
 /-- The `Lp` inner product of two Hermite lifts is the weighted integral. -/
-lemma inner_hermiteL2 (m n : ℕ) :
-    ⟪hermiteL2 m, hermiteL2 n⟫ =
-      ∫ x : ℝ, (hermite ℝ m).eval x * (hermite ℝ n).eval x
-        * gaussianDensity x := by
+lemma inner_hermiteL2 (m n : ℕ) : ⟪hermiteL2 m, hermiteL2 n⟫ =
+      ∫ x : ℝ, (hermite ℝ m).eval x * (hermite ℝ n).eval x * gaussianDensity x := by
+  rw [MeasureTheory.L2.inner_def]
+  simp only [Real.inner_apply]
+  --unfold
   sorry
 
 
-/-- **`‖Hₙ‖² = n!` in `L²(γ)`** — in particular `hermiteL2` is *not* orthonormal. -/
+-- **`‖Hₙ‖² = n!` in `L²(γ)`** — in particular `hermiteL2` is *not* orthonormal.
 lemma norm_hermiteL2_sq (n : ℕ) : ‖hermiteL2 n‖ ^ 2 = (n.factorial : ℝ) := by
   rw [← real_inner_self_eq_norm_sq, inner_hermiteL2, hermite_orthogonal_gaussian n n, if_pos rfl]
 
@@ -687,9 +688,8 @@ lemma norm_hermiteL2 (n : ℕ) : ‖hermiteL2 n‖ = Real.sqrt (n.factorial : �
 
 lemma hermiteL2_ne_zero (n : ℕ) : hermiteL2 n ≠ 0 := by
   intro h
-  have := norm_hermiteL2_sq n
-  rw [h, norm_zero] at this
-  exact absurd this.symm (by positivity)
+  apply Nat.factorial_ne_zero n
+  exact_mod_cast (by simpa [h] using (norm_hermiteL2_sq n).symm)
 
 /-! ### The orthonormal family -/
 
@@ -717,7 +717,8 @@ theorem hermiteHat_orthonormal : Orthonormal ℝ hermiteHat := by
     rw [if_pos rfl, if_pos rfl]
     rw [← mul_inv, ← Real.sqrt_mul_self (Real.sqrt_nonneg (m.factorial : ℝ))]
     rw [Real.mul_self_sqrt hfac.le]
-    exact inv_mul_cancel₀ hfac.ne'
+    field_simp
+    rw [Real.sq_sqrt (Nat.cast_nonneg (m !) : (0:ℝ) ≤ (m ! : ℝ))]
   · rw [if_neg h, if_neg h, mul_zero]
 
 /-! ### Completeness
@@ -735,15 +736,13 @@ every polynomial then `z ↦ ∫ f(x) e^{zx} dγ(x)` is entire, vanishes to all 
 hence is identically `0`, forcing `f = 0` a.e. Since `Hₙ` has degree `n` and is monic,
 `{H₀,…,H_N}` spans the same subspace as `{1, X, …, X^N}` (a triangular change of basis),
 so the Hermite span equals the polynomial span. -/
-theorem hermiteHat_dense :
-    (Submodule.span ℝ (Set.range hermiteHat)).topologicalClosure = ⊤ := by
+theorem hermiteHat_dense : (Submodule.span ℝ (Set.range hermiteHat)).topologicalClosure = ⊤ := by
   sorry
 
 /-- The Hermite span equals the span of all polynomial functions: `Hₙ` is monic of degree `n`,
 so the change of basis from `{Xⁱ}` is unitriangular. This is the easy half of completeness. -/
-lemma span_hermiteHat_eq_span_monomials :
-    Submodule.span ℝ (Set.range hermiteHat)
-      = Submodule.span ℝ (Set.range fun n : ℕ => hermiteL2 n) := by
+lemma span_hermiteHat_eq_span_monomials : Submodule.span ℝ (Set.range hermiteHat)
+    = Submodule.span ℝ (Set.range fun n : ℕ => hermiteL2 n) := by
   refine le_antisymm (Submodule.span_le.mpr ?_) (Submodule.span_le.mpr ?_)
   · rintro _ ⟨n, rfl⟩
     exact Submodule.smul_mem _ _ (Submodule.subset_span ⟨n, rfl⟩)
@@ -753,6 +752,7 @@ lemma span_hermiteHat_eq_span_monomials :
       positivity
     have : hermiteL2 n = Real.sqrt (n.factorial : ℝ) • hermiteHat n := by
       simp only [hermiteHat, smul_smul, mul_inv_cancel₀ hfac, one_smul]
+    change hermiteL2 n ∈ Submodule.span ℝ (Set.range hermiteHat)
     rw [this]
     exact Submodule.smul_mem _ _ (Submodule.subset_span ⟨n, rfl⟩)
 
