@@ -20,6 +20,10 @@ public import Mathlib.Analysis.InnerProductSpace.L2Space     -- HilbertBasis
 public import Mathlib.MeasureTheory.Function.L2Space         -- L2.inner_def on `Lp`
 public import Mathlib.MeasureTheory.Integral.Bochner.ContinuousLinearMap
 
+public import Mathlib.Probability.Moments.ComplexMGF          -- complexMGF, ext_of_complexMGF_id_eq
+public import Mathlib.Analysis.Analytic.Order                 -- analyticOrderAt
+public import Mathlib.Analysis.Analytic.Uniqueness            -- identity theorem
+
 /-!
 # Hermite polynomials
 
@@ -336,8 +340,8 @@ correct bundled structure is `HilbertBasis ℕ ℝ (Lp ℝ 2 (gaussianReal 0 1))
 `Orthonormal` + dense span — provided below as `hermiteHilbertBasis`.
 -/
 
-open MeasureTheory ProbabilityTheory
-open scoped Nat RealInnerProductSpace ENNReal
+open MeasureTheory ProbabilityTheory Filter
+open scoped Nat RealInnerProductSpace ENNReal Topology
 
 /-! ### The Gaussian weight -/
 
@@ -632,22 +636,20 @@ theorem integrable_polynomial_mul_gaussian {b : ℝ} (hb : 0 < b) (p : ℝ[X]) :
   exact integrable_finsetSum _ fun i _ =>
     (integrable_pow_mul_gaussian hb i).const_mul (p.coeff i)
 
-/-- Hermite polynomials are in `L²` of the standard Gaussian. -/
-lemma hermite_memLp (n : ℕ) : MemLp (fun x => (hermite ℝ n).eval x) 2 (gaussianReal 0 1) := by
-  have hmeas :
-      AEStronglyMeasurable
-        (fun x : ℝ => (hermite ℝ n).eval x)
-        (gaussianReal 0 1) := by
-    exact (Polynomial.continuous (hermite ℝ n)).aestronglyMeasurable
+/-- Every polynomial is in `L²` of the standard Gaussian: the Gaussian weight kills the polynomial
+growth. -/
+lemma poly_memLp (p : ℝ[X]) : MemLp (fun x => p.eval x) 2 (gaussianReal 0 1) := by
+  have hmeas : AEStronglyMeasurable (fun x : ℝ => p.eval x) (gaussianReal 0 1) :=
+    (Polynomial.continuous p).aestronglyMeasurable
   rw [memLp_two_iff_integrable_sq hmeas]
   rw [gaussianReal_of_var_ne_zero 0 (by norm_num : (1 : NNReal) ≠ 0)]
   rw [integrable_withDensity_iff
     (measurable_gaussianPDF 0 1)]
-  · have h := integrable_polynomial_mul_gaussian (b := (1 / 2 : ℝ)) (by norm_num) ((hermite ℝ n)^2)
+  · have h := integrable_polynomial_mul_gaussian (b := (1 / 2 : ℝ)) (by norm_num) (p ^ 2)
     have hc := h.mul_const (Real.sqrt (2 * Real.pi))⁻¹
     convert hc using 1
     · rfl
-    simp only [toReal_gaussianPDF,gaussianPDFReal,Polynomial.eval_pow]
+    simp only [toReal_gaussianPDF, gaussianPDFReal, Polynomial.eval_pow]
     ring_nf
     simp only [NNReal.coe_one, mul_one, Nat.ofNat_nonneg, Real.sqrt_mul', mul_inv_rev, inv_one]
     funext x
@@ -655,6 +657,10 @@ lemma hermite_memLp (n : ℕ) : MemLp (fun x => (hermite ℝ n).eval x) 2 (gauss
   filter_upwards
   intro x
   simp [gaussianPDF]
+
+/-- Hermite polynomials are in `L²` of the standard Gaussian. -/
+lemma hermite_memLp (n : ℕ) : MemLp (fun x => (hermite ℝ n).eval x) 2 (gaussianReal 0 1) :=
+  poly_memLp (hermite ℝ n)
 
 /-- The unnormalised Hermite polynomial as an element of `L²(γ)`. Note `‖hermiteL2 n‖² = n!`. -/
 noncomputable def hermiteL2 (n : ℕ) : Lp ℝ 2 (gaussianReal 0 1) :=
@@ -715,6 +721,159 @@ theorem hermiteHat_orthonormal : Orthonormal ℝ hermiteHat := by
     rw [Real.sq_sqrt (Nat.cast_nonneg (m !) : (0:ℝ) ≤ (m ! : ℝ))]
   · rw [if_neg h, if_neg h, mul_zero]
 
+/-! ### Determinacy of finite measures by their moments
+
+The analytic input to completeness: a finite measure on `ℝ` all of whose exponential moments are
+finite has an *entire* moment-generating function, whose Taylor coefficients at `0` are the ordinary
+moments. Two such measures with the same moments therefore have the same (entire) moment-generating
+function, and hence — by `MeasureTheory.Measure.ext_of_complexMGF_id_eq` — are equal. -/
+
+/-- **Determinacy of the moment problem under an analytic (Carleman-type) condition.**
+Two finite measures on `ℝ` whose exponential moments are all finite (so that their
+moment-generating functions extend to entire functions) are equal as soon as all their moments
+`∫ xⁿ` agree. -/
+theorem _root_.MeasureTheory.Measure.ext_of_forall_integral_pow_eq {μ ν : Measure ℝ}
+    [IsFiniteMeasure μ] [IsFiniteMeasure ν]
+    (hμ : ∀ t : ℝ, Integrable (fun x ↦ Real.exp (t * x)) μ)
+    (hν : ∀ t : ℝ, Integrable (fun x ↦ Real.exp (t * x)) ν)
+    (hmom : ∀ n : ℕ, ∫ x, x ^ n ∂μ = ∫ x, x ^ n ∂ν) :
+    μ = ν := by
+  have hμset : integrableExpSet id μ = Set.univ := by
+    ext t; simpa [integrableExpSet] using hμ t
+  have hνset : integrableExpSet id ν = Set.univ := by
+    ext t; simpa [integrableExpSet] using hν t
+  have huniv : {z : ℂ | z.re ∈ (Set.univ : Set ℝ)} = Set.univ := by ext; simp
+  have hμan : AnalyticOnNhd ℂ (complexMGF id μ) Set.univ := by
+    have h := analyticOnNhd_complexMGF (X := (id : ℝ → ℝ)) (μ := μ)
+    rwa [hμset, interior_univ, huniv] at h
+  have hνan : AnalyticOnNhd ℂ (complexMGF id ν) Set.univ := by
+    have h := analyticOnNhd_complexMGF (X := (id : ℝ → ℝ)) (μ := ν)
+    rwa [hνset, interior_univ, huniv] at h
+  have hmem0μ : (0 : ℂ).re ∈ interior (integrableExpSet id μ) := by
+    rw [hμset, interior_univ]; trivial
+  have hmem0ν : (0 : ℂ).re ∈ interior (integrableExpSet id ν) := by
+    rw [hνset, interior_univ]; trivial
+  -- The moment-generating functions have the same jet at `0`: the `n`-th derivative is `∫ xⁿ`.
+  have hjet : ∀ n,
+      iteratedDeriv n (complexMGF id μ) 0 = iteratedDeriv n (complexMGF id ν) 0 := by
+    intro n
+    rw [iteratedDeriv_complexMGF hmem0μ n, iteratedDeriv_complexMGF hmem0ν n]
+    simp only [id_eq, zero_mul, Complex.exp_zero, mul_one]
+    have key : ∀ ρ : Measure ℝ,
+        ∫ ω, (ω : ℂ) ^ n ∂ρ = ((∫ ω, ω ^ n ∂ρ : ℝ) : ℂ) := by
+      intro ρ; rw [← integral_complex_ofReal]; congr 1 with ω; push_cast; ring
+    rw [key μ, key ν, hmom n]
+  -- Two entire functions with the same jet at `0` coincide (identity theorem).
+  have hMGF : complexMGF id μ = complexMGF id ν := by
+    refine hμan.eq_of_eventuallyEq hνan (z₀ := 0) ?_
+    have hAt : AnalyticAt ℂ (fun z ↦ complexMGF id μ z - complexMGF id ν z) 0 :=
+      (hμan 0 trivial).sub (hνan 0 trivial)
+    have h0 : ∀ n, iteratedDeriv n (fun z ↦ complexMGF id μ z - complexMGF id ν z) 0 = 0 := by
+      intro n
+      rw [iteratedDeriv_fun_sub (hμan 0 trivial).contDiffAt (hνan 0 trivial).contDiffAt, hjet n,
+        sub_self]
+    have htop : analyticOrderAt (fun z ↦ complexMGF id μ z - complexMGF id ν z) 0 = ⊤ := by
+      rw [ENat.eq_top_iff_forall_ge]
+      intro m
+      rw [natCast_le_analyticOrderAt_iff_iteratedDeriv_eq_zero hAt]
+      exact fun i _ ↦ h0 i
+    filter_upwards [analyticOrderAt_eq_top.mp htop] with z hz
+    rwa [sub_eq_zero] at hz
+  exact Measure.ext_of_complexMGF_id_eq hMGF
+
+/-- If `g ∈ L²(γ)` has vanishing moments `∫ xⁿ · g = 0` for every `n`, then `g = 0` a.e.
+Splitting `g = g⁺ - g⁻` and reading the two parts as densities of finite measures, the hypothesis
+says these measures have equal moments; since the Gaussian has all exponential moments, so do
+they, and `MeasureTheory.Measure.ext_of_forall_integral_pow_eq` forces them equal, i.e. `g⁺ = g⁻`.
+-/
+lemma ae_eq_zero_of_forall_integral_pow_mul_eq_zero {g : ℝ → ℝ}
+    (hg : MemLp g 2 (gaussianReal 0 1))
+    (hmom : ∀ n : ℕ, ∫ x, x ^ n * g x ∂(gaussianReal 0 1) = 0) :
+    g =ᵐ[gaussianReal 0 1] 0 := by
+  set γ := gaussianReal 0 1
+  have hgint : Integrable g γ := hg.integrable one_le_two
+  have hgm : AEMeasurable g γ := hg.aestronglyMeasurable.aemeasurable
+  set dp : ℝ → ℝ≥0∞ := fun x => ENNReal.ofReal (g x)
+  set dn : ℝ → ℝ≥0∞ := fun x => ENNReal.ofReal (-(g x))
+  have hdp : AEMeasurable dp γ := hgm.ennreal_ofReal
+  have hdn : AEMeasurable dn γ := hgm.neg.ennreal_ofReal
+  have hltp : ∀ᵐ x ∂γ, dp x < ∞ := ae_of_all _ fun x => ENNReal.ofReal_lt_top
+  have hltn : ∀ᵐ x ∂γ, dn x < ∞ := ae_of_all _ fun x => ENNReal.ofReal_lt_top
+  haveI hfinP : IsFiniteMeasure (γ.withDensity dp) :=
+    isFiniteMeasure_withDensity_ofReal hgint.hasFiniteIntegral
+  haveI hfinN : IsFiniteMeasure (γ.withDensity dn) :=
+    isFiniteMeasure_withDensity_ofReal hgint.neg.hasFiniteIntegral
+  -- `g⁺`, `g⁻`, and the exponentials lie in `L²(γ)`, so the relevant products are integrable.
+  have hmemMax : ∀ h : ℝ → ℝ, MemLp h 2 γ → MemLp (fun x => max (h x) 0) 2 γ := by
+    intro h hh
+    refine hh.mono
+      ((hh.aestronglyMeasurable.aemeasurable.max aemeasurable_const).aestronglyMeasurable)
+      (ae_of_all _ fun x => ?_)
+    rw [Real.norm_eq_abs, Real.norm_eq_abs, abs_of_nonneg (le_max_right _ _)]
+    exact max_le (le_abs_self _) (abs_nonneg _)
+  have hmemP : MemLp (fun x => max (g x) 0) 2 γ := hmemMax g hg
+  have hmemN : MemLp (fun x => max (-(g x)) 0) 2 γ := hmemMax _ hg.neg
+  have hmemPow : ∀ n : ℕ, MemLp (fun x : ℝ => x ^ n) 2 γ := by
+    intro n; have := poly_memLp (X ^ n); simpa using this
+  have hmemExp : ∀ t : ℝ, MemLp (fun x => Real.exp (t * x)) 2 γ := by
+    intro t
+    have hmeas : AEStronglyMeasurable (fun x => Real.exp (t * x)) γ := by fun_prop
+    rw [memLp_two_iff_integrable_sq hmeas]
+    have hsq : (fun x => Real.exp (t * x) ^ 2) = fun x => Real.exp ((2 * t) * x) := by
+      funext x; rw [← Real.exp_nat_mul]; ring_nf
+    rw [hsq]; exact integrable_exp_mul_gaussianReal (2 * t)
+  -- Both measures have all exponential moments.
+  have hexpP : ∀ t : ℝ, Integrable (fun x => Real.exp (t * x)) (γ.withDensity dp) := by
+    intro t
+    rw [integrable_withDensity_iff_integrable_smul₀' hdp hltp]
+    have key : Integrable (fun x => max (g x) 0 * Real.exp (t * x)) γ :=
+      MemLp.integrable_mul hmemP (hmemExp t)
+    exact key.congr (ae_of_all _ fun x => by simp [dp, ENNReal.toReal_ofReal', smul_eq_mul])
+  have hexpN : ∀ t : ℝ, Integrable (fun x => Real.exp (t * x)) (γ.withDensity dn) := by
+    intro t
+    rw [integrable_withDensity_iff_integrable_smul₀' hdn hltn]
+    have key : Integrable (fun x => max (-(g x)) 0 * Real.exp (t * x)) γ :=
+      MemLp.integrable_mul hmemN (hmemExp t)
+    exact key.congr (ae_of_all _ fun x => by simp [dn, ENNReal.toReal_ofReal', smul_eq_mul])
+  -- Both measures have the same moments: `∫ xⁿ g⁺ - ∫ xⁿ g⁻ = ∫ xⁿ g = 0`.
+  have hIntP : ∀ n : ℕ, Integrable (fun x => max (g x) 0 * x ^ n) γ :=
+    fun n => MemLp.integrable_mul hmemP (hmemPow n)
+  have hIntN : ∀ n : ℕ, Integrable (fun x => max (-(g x)) 0 * x ^ n) γ :=
+    fun n => MemLp.integrable_mul hmemN (hmemPow n)
+  have hmomEq : ∀ n : ℕ,
+      ∫ x, x ^ n ∂(γ.withDensity dp) = ∫ x, x ^ n ∂(γ.withDensity dn) := by
+    intro n
+    rw [integral_withDensity_eq_integral_toReal_smul₀ hdp hltp,
+      integral_withDensity_eq_integral_toReal_smul₀ hdn hltn]
+    have hP : (fun x => (dp x).toReal • x ^ n) = fun x => max (g x) 0 * x ^ n := by
+      funext x; simp [dp, ENNReal.toReal_ofReal', smul_eq_mul]
+    have hN : (fun x => (dn x).toReal • x ^ n) = fun x => max (-(g x)) 0 * x ^ n := by
+      funext x; simp [dn, ENNReal.toReal_ofReal', smul_eq_mul]
+    rw [hP, hN, ← sub_eq_zero, ← integral_sub (hIntP n) (hIntN n)]
+    refine (integral_congr_ae (ae_of_all _ fun x => ?_)).trans (hmom n)
+    have hpm : max (g x) 0 - max (-(g x)) 0 = g x := by
+      rcases le_total 0 (g x) with h | h
+      · rw [max_eq_left h, max_eq_right (by linarith)]; ring
+      · rw [max_eq_right h, max_eq_left (by linarith)]; ring
+    change max (g x) 0 * x ^ n - max (-(g x)) 0 * x ^ n = x ^ n * g x
+    rw [← sub_mul, hpm]; ring
+  -- Moment determinacy: the two densities agree, so `g⁺ = g⁻` a.e., i.e. `g = 0` a.e.
+  have hμeq : γ.withDensity dp = γ.withDensity dn :=
+    Measure.ext_of_forall_integral_pow_eq hexpP hexpN hmomEq
+  have hfin : ∫⁻ x, dp x ∂γ ≠ ∞ := by
+    refine (lt_of_le_of_lt (lintegral_mono fun x => ?_) hgint.hasFiniteIntegral).ne
+    rw [Real.enorm_eq_ofReal_abs]
+    exact ENNReal.ofReal_le_ofReal (le_abs_self _)
+  have hdae : dp =ᵐ[γ] dn := (withDensity_eq_iff hdp hdn hfin).mp hμeq
+  filter_upwards [hdae] with x hx
+  simp only [dp, dn] at hx
+  simp only [Pi.zero_apply]
+  rcases le_total 0 (g x) with h | h
+  · have h0 : ENNReal.ofReal (-(g x)) = 0 := ENNReal.ofReal_eq_zero.mpr (by linarith)
+    rw [h0] at hx; linarith [ENNReal.ofReal_eq_zero.mp hx]
+  · have h0 : ENNReal.ofReal (g x) = 0 := ENNReal.ofReal_eq_zero.mpr h
+    rw [h0] at hx; linarith [ENNReal.ofReal_eq_zero.mp hx.symm]
+
 /-! ### Completeness
 
 This is the correct `L²` statement. It is **not** `Module.Basis.span_eq`, which would assert
@@ -723,15 +882,80 @@ that every `L²` function is a *finite* linear combination of Hermite polynomial
 
 /-- **Density of the Hermite span in `L²(γ)`.**
 
-Proof sketch: polynomials are dense in `L²(γ)` because the Gaussian has a finite
-moment-generating function on a neighbourhood of `0` (`Real.exp_mul_gaussian_integrable`-style
-bounds), so `γ` is determined by its moments; concretely, if `f ∈ L²(γ)` is orthogonal to
-every polynomial then `z ↦ ∫ f(x) e^{zx} dγ(x)` is entire, vanishes to all orders at `0`,
-hence is identically `0`, forcing `f = 0` a.e. Since `Hₙ` has degree `n` and is monic,
-`{H₀,…,H_N}` spans the same subspace as `{1, X, …, X^N}` (a triangular change of basis),
-so the Hermite span equals the polynomial span. -/
+A subspace of a Hilbert space is dense iff its orthogonal complement is trivial, so it suffices
+to show that any `f ∈ L²(γ)` orthogonal to every `Hₙ` vanishes. Orthogonality gives `∫ Hₙ · f = 0`
+for all `n`; since `Hₘ` is monic of degree `m`, this propagates to `∫ xᵐ · f = 0` for all `m` (a
+triangular change of basis). Vanishing of all moments then forces `f = 0` a.e. by
+`ae_eq_zero_of_forall_integral_pow_mul_eq_zero`. -/
 theorem hermiteHat_dense : (Submodule.span ℝ (Set.range hermiteHat)).topologicalClosure = ⊤ := by
-  sorry
+  rw [Submodule.topologicalClosure_eq_top_iff, Submodule.eq_bot_iff]
+  intro f hf
+  -- Orthogonality to the Hermite family gives `∫ Hₙ · f dγ = 0` for all `n`.
+  have hinner : ∀ n, ⟪hermiteL2 n, f⟫
+      = ∫ x, (hermite ℝ n).eval x * (⇑f) x ∂(gaussianReal 0 1) := by
+    intro n
+    rw [MeasureTheory.L2.inner_def]
+    simp only [RCLike.inner_apply, conj_trivial]
+    refine integral_congr_ae ?_
+    filter_upwards [(hermite_memLp n).coeFn_toLp] with x hn
+    simp only [hermiteL2]
+    rw [hn]; ring
+  have hgiven : ∀ n, ∫ x, (hermite ℝ n).eval x * (⇑f) x ∂(gaussianReal 0 1) = 0 := by
+    intro n
+    rw [← hinner n]
+    have hhat : ⟪hermiteHat n, f⟫ = 0 :=
+      (Submodule.mem_orthogonal _ _).mp hf (hermiteHat n) (Submodule.subset_span ⟨n, rfl⟩)
+    simp only [hermiteHat, real_inner_smul_left] at hhat
+    rcases mul_eq_zero.mp hhat with h | h
+    · refine absurd h ?_
+      have : (0 : ℝ) < (n.factorial : ℝ) := by exact_mod_cast n.factorial_pos
+      positivity
+    · exact h
+  set g : ℝ → ℝ := ⇑f
+  have hg : MemLp g 2 (gaussianReal 0 1) := Lp.memLp f
+  -- `Hₘ` is monic of degree `m`, lowering `∫ Hₘ · g = 0` to `∫ xᵐ · g = 0` by strong induction.
+  have hint : ∀ q : ℝ[X], Integrable (fun x => q.eval x * g x) (gaussianReal 0 1) :=
+    fun q => MemLp.integrable_mul (poly_memLp q) hg
+  have hintPow : ∀ k : ℕ, Integrable (fun x : ℝ => x ^ k * g x) (gaussianReal 0 1) := by
+    intro k; have := hint (X ^ k); simpa using this
+  have hlin : ∀ q : ℝ[X], ∫ x, q.eval x * g x ∂(gaussianReal 0 1)
+      = ∑ k ∈ q.support, q.coeff k * ∫ x, x ^ k * g x ∂(gaussianReal 0 1) := by
+    intro q
+    have hrw : (fun x => q.eval x * g x)
+        = fun x => ∑ k ∈ q.support, q.coeff k * (x ^ k * g x) := by
+      funext x
+      rw [Polynomial.eval_eq_sum, Polynomial.sum, Finset.sum_mul]
+      exact Finset.sum_congr rfl fun k _ => by ring
+    rw [hrw, integral_finsetSum _ (fun k _ => (hintPow k).const_mul _)]
+    exact Finset.sum_congr rfl fun k _ => integral_const_mul _ _
+  have moment_zero : ∀ m : ℕ, ∫ x, x ^ m * g x ∂(gaussianReal 0 1) = 0 := by
+    intro m
+    induction m using Nat.strong_induction_on with
+    | _ m ih =>
+      have hdeg : (hermite ℝ m - X ^ m : ℝ[X]).degree < (m : WithBot ℕ) := by
+        have h1 : (hermite ℝ m).degree = (X ^ m : ℝ[X]).degree := by
+          rw [degree_hermite ℝ m, degree_X_pow]
+        have h2 : (hermite ℝ m).leadingCoeff = (X ^ m : ℝ[X]).leadingCoeff := by
+          rw [(hermite_monic ℝ m).leadingCoeff, leadingCoeff_X_pow]
+        have hh := degree_sub_lt h1 (hermite_monic ℝ m).ne_zero h2
+        rwa [degree_hermite ℝ m] at hh
+      have hsupp : ∀ k ∈ (hermite ℝ m - X ^ m : ℝ[X]).support, k < m := by
+        intro k hk
+        have hle : (k : WithBot ℕ) ≤ (hermite ℝ m - X ^ m).degree :=
+          le_degree_of_mem_supp k hk
+        exact_mod_cast lt_of_le_of_lt hle hdeg
+      have hsplit : ∫ x, x ^ m * g x ∂(gaussianReal 0 1)
+          = (∫ x, (hermite ℝ m).eval x * g x ∂(gaussianReal 0 1))
+            - ∫ x, (hermite ℝ m - X ^ m).eval x * g x ∂(gaussianReal 0 1) := by
+        rw [← integral_sub (hint (hermite ℝ m)) (hint (hermite ℝ m - X ^ m))]
+        refine integral_congr_ae ?_
+        filter_upwards with x
+        simp only [Polynomial.eval_sub, Polynomial.eval_pow, Polynomial.eval_X]
+        ring
+      rw [hsplit, hgiven m, zero_sub, neg_eq_zero, hlin (hermite ℝ m - X ^ m)]
+      exact Finset.sum_eq_zero fun k hk => by rw [ih k (hsupp k hk), mul_zero]
+  exact (Lp.eq_zero_iff_ae_eq_zero).mpr
+    (ae_eq_zero_of_forall_integral_pow_mul_eq_zero hg moment_zero)
 
 /-- The Hermite span equals the span of all polynomial functions: `Hₙ` is monic of degree `n`,
 so the change of basis from `{Xⁱ}` is unitriangular. This is the easy half of completeness. -/
